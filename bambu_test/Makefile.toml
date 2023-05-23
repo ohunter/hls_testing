@@ -1,0 +1,49 @@
+[tasks.compile_llvm_ir]
+private = true
+command = "cargo"
+args = ["rustc",
+        "--",
+        "--emit=llvm-ir",
+        "--crate-type=lib",
+        "-Coverflow-checks=off",
+        "-Cno-vectorize-loops",
+        "-Ctarget-cpu=generic",
+        "-Cpanic=abort",
+        "-Cllvm-args=--opaque-pointers=false",
+]
+
+[tasks.move_llvm_ir]
+private = true
+script = '''
+#!/usr/bin/env bash
+
+for file in ${CARGO_MAKE_CRATE_TARGET_DIRECTORY}/debug/deps/*.ll; do
+    cp $file ${CARGO_MAKE_CRATE_TARGET_DIRECTORY}/debug/$(basename -- $file .ll | sed -E 's/(.+)-.+?/\1/g').ll
+done
+'''
+
+[tasks.build]
+dependencies = [
+    "compile_llvm_ir",
+    "move_llvm_ir"
+]
+
+[tasks.create_synthesis_folder]
+private = true
+dependencies = ["build"]
+script = '''
+mkdir -p ${CARGO_MAKE_CRATE_TARGET_DIRECTORY}/debug/synthesis
+'''
+
+[tasks.synthesize]
+cwd = "${CARGO_MAKE_CRATE_TARGET_DIRECTORY}/debug/synthesis"
+dependencies = [
+    "build",
+    "create_synthesis_folder"
+]
+script = '''
+#!/usr/bin/env bash
+bambu=$(which bambu-2023.1.AppImage)
+
+bambu ${CARGO_MAKE_CRATE_TARGET_DIRECTORY}/debug/bambu_test.ll --top-fname=min_max_rust --simulate --simulator=VERILATOR -v2 --compiler=I386_CLANG13
+'''
